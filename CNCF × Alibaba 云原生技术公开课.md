@@ -164,3 +164,118 @@
   每一个 Guest OS 都有一个独立的内核，比如 Ubuntu、CentOS 甚至是 Windows 等，在这样的 Guest OS 之下，每个应用都是相互独立的，VM 可以提供一个更好的隔离效果。但这样的隔离效果需要付出一定的代价，因为需要把一部分的计算资源交给虚拟化，这样就很难充分利用现有的计算资源，并且每个 Guest OS 都需要占用大量的磁盘空间，比如 Windows 操作系统的安装需要 10~30G 的磁盘空间，Ubuntu 也需要 5~6G，同时这样的方式启动很慢。
 
   容器是针对于进程而言的，因此无需 Guest OS，只需要一个独立的文件系统提供其所需要文件集合即可。所有的文件隔离都是进程级别的，因此启动时间快于 VM，并且所需的磁盘空间也小于 VM。当然了，进程级别的隔离并没有想象中的那么好，隔离效果相比 VM 要差很多。
+
+### Kubernetes 核心概念
+
+* 什么是 Kubernetes
+
+  Kubernetes 是一个自动化的容器编排平台，它负责应用的部署、应用的弹性以及应用的管理，这些都是基于容器的。
+
+  核心功能：服务发现与负载均衡、容器自动装箱（scheduling）、存储编排、自动容器恢复、自动发布与回滚、配置与密文管理、批量执行、水平伸缩。
+
+* Kubernetes 的架构
+
+  * Master
+
+    所有 UI、CLI 这些 user 侧的组件，只会和 Master 进行连接，把希望的状态或者想执行的命令下发给 Master，Master 会把这些命令或者状态下发给相应的节点，进行最终的执行。
+
+    * API Server（可以水平扩展）
+
+      Kubernetes 中所有的组件都会和 API Server 进行连接，组件与组件之间一般不进行独立的连接，都依赖于 API Server 进行消息的传送。
+
+    * Controller（可以进行热备）
+
+      它用来完成对集群状态的一些管理（如自动容器恢复、水平伸缩）。
+
+    * Scheduler（可以进行热备）
+
+      把一个用户提交的 container，依据它对 CPU、对 memory 请求大小，找一台合适的节点，进行放置。
+
+    * etcd
+
+      是一个分布式的存储系统，API Server 中所需要的这些原信息都被放置在 etcd 中，etcd 本身是一个高可用系统，通过 etcd 保证整个 Kubernetes 的 Master 组件的高可用性。
+
+  * Node
+
+    Kubernetes 的 Node 是真正运行业务负载的，每个业务负载会以 Pod 的形式运行。
+
+    * Pod
+
+      一个 Pod 中运行一个或者多个容器，真正去运行这些 Pod 的组件的是叫做 Kubelet。
+
+    * Kubelet
+
+      它通过 API Server 接收到所需要 Pod 运行的状态，然后提交到 Container Runtime 组件中。
+
+    * Container Runtime
+
+      在 OS 上创建容器所需要运行的环境，最终把容器或者 Pod 运行起来。
+
+    * Storage Plugin
+
+    * Network Plugin
+
+    * Kube-proxy
+
+      它是为了提供 Service network 来进行搭网组网的。
+
+* Kubernetes 的核心概念与 API
+
+  * 核心概念
+
+    * Pod
+
+      最小的调度以及资源单元
+
+      由一个或者多个容器组成
+
+      定义容器运行的方式（Command、环境变量）
+
+      提供给容器共享的运行环境（网络、进程空间）
+
+    * Volume
+
+      声明在 Pod 中的容器可以访问的文件目录
+
+      可以被挂载在 Pod 中一个或者多个容器的指定路径下
+
+      支持多种后端存储的抽象（本地存储、分布式存储、云存储）
+
+    * Deployment
+
+      Deployment 是 Pod 更上层的一个抽象，一般用 Deployment 抽象做应用的真正管理，而 Pod 是组成 Deployment 最小的单元
+
+      定义一组 Pod 的副本数目、版本等
+
+      通过 Controller 维持 Pod 的数目（自动恢复失败的 Pod）
+
+      通过控制器以指定的策略控制版本（滚动升级、重新生成、回滚）
+
+    * Service
+
+      Service 提供了一个或者多个 Pod 实例的稳定访问地址（ClusterIP、NodePort、LoadBalancer）
+
+    * Namespace
+
+      一个集群内部的逻辑隔离机制（鉴权、资源额度）
+
+      每个资源都属于一个 Namespace，同一个 Namespace 中的资源命名唯一，不同 Namespace 中的资源可重名
+
+  * API（HTTP + JSON）
+
+    apiVersion / kind / metadata / spec
+
+    labels - 资源集合的默认表达形式
+
+* minikube
+
+  minikube status / kubectl get nodes / kubectl get deployments
+
+  kubectl get --watch deployments
+
+  kubectl apply -f deployment.yaml / kubectl apply -f deployment-update.yaml / kubectl apply -f deployment-scale.yaml
+
+  kubectl describe deployment nginx-deployment
+
+  kubectl delete deployment nginx-deployment
+
