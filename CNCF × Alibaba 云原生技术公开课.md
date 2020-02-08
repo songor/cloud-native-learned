@@ -279,3 +279,46 @@
 
   kubectl delete deployment nginx-deployment
 
+### 理解 Pod 和容器设计模式
+
+* 为什么需要 Pod
+
+  容器里 PID=1 的进程就是应用本身（“单进程”模型）-> 管理容器 = 直接管理应用本身 -> 不可变基础设施
+
+  类比：镜像 -> 软件安装包，容器 -> 进程，Pod -> 进程组，Kubernetes -> 操作系统
+
+  Pod 是一个逻辑单位，多个容器的组合（共享某些资源），Pod 也是 Kubernetes 的原子调度单位（Task co-scheduling）
+
+  亲密关系，两个应用需要运行在同一台宿主机上，调度
+
+  超亲密关系，发生文件交换、通过 localhost 或者本地 Socket 进行通信、非常频繁的 RPC 调用、共享某些 Linux Namespace（如 Network Namespace），Pod
+
+* Pod 的实现机制
+
+  * Pod 要解决的问题
+
+    如何让一个 Pod 里的多个容器之间最高效的共享某些资源和数据，因为容器之间原本是被 Linux Namespace 和 cgroups 隔开的。
+
+  * 共享网络
+
+    通过 Infra Container（非常小的镜像，汇编语言编写的，永远处于“暂停”状态）来共享同一个 Network Namespace，Pod 中其它容器通过 Join Namespace 的方式加入到 Infra Container 的 Network Namespace 中，它们看到的网络视图是完全一样的
+
+    使用 localhost 进行通信
+
+    一个 Pod 只有一个 IP 地址，就是这个 Pod 的 Network Namespace 对应的 IP 地址，也是这个 Infra Container 的 IP 地址
+
+    整个 Pod 的生命周期与 Infra Container 的生命周期一致，而与容器 A 和 B 无关。这也是为什么在 Kubernetes 里面，允许单独更新 Pod 里的某一个镜像，即：做这个操作，整个 Pod 不会重建，也不会重启。
+
+  * 共享存储
+
+    ![Pod 共享存储](https://github.com/songor/cloud-native-learned/blob/master/images/Pod%20%E5%85%B1%E4%BA%AB%E5%AD%98%E5%82%A8.PNG?raw=true)
+
+    Pod level volume -> shared-data 对应在宿主机上的目录会被同时绑定挂载进容器中
+
+* 容器设计模式（Sidecar）
+
+  通过在 Pod 里定义专门容器（initContainers），来执行主业务容器需要的辅助工作
+
+  将辅助功能同主业务容器解耦，实现独立发布和能力重用
+
+  应用与日志收集、代理容器、适配器容器
