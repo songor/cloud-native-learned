@@ -311,7 +311,7 @@
 
   * 共享存储
 
-    ![Pod 共享存储](https://github.com/songor/cloud-native-learned/blob/master/images/Pod%20%E5%85%B1%E4%BA%AB%E5%AD%98%E5%82%A8.PNG?raw=true)
+    ![Pod 共享存储](https://github.com/songor/cloud-native-learned/blob/master/images/Pod%20%E5%85%B1%E4%BA%AB%E5%AD%98%E5%82%A8.PNG)
 
     Pod level volume -> shared-data 对应在宿主机上的目录会被同时绑定挂载进容器中
 
@@ -322,3 +322,92 @@
   将辅助功能同主业务容器解耦，实现独立发布和能力重用
 
   应用与日志收集、代理容器、适配器容器
+
+### 应用编排与管理：核心原理
+
+* 资源元信息
+
+  * Kubernetes 资源对象
+
+    Spec - 期望的状态
+
+    Status - 观测到的状态
+
+    Metadata - Labels / Annotations / OwnerReference
+
+    * Labels
+
+      标识型的 Key: Value 元数据
+
+      用于筛选资源；唯一的组合资源的方法
+
+      可以使用 selector 来查询，类似于 SQL 'select * where ...'（相等型 Selector =、集合型 Selector in / notin，!release）
+
+      environment: production / release: stable
+
+    * Annotations
+
+      Key: Value
+
+      存储资源的非标识性信息；扩展资源的 spec / status
+
+      一般比 label 更大；可以包含特殊字符；可以结构化也可以非结构化
+
+    * OwnerReference
+
+      Owner 即集合类资源，如 Pod 的集合 replicaset / statefulset
+
+      集合类资源的控制器创建了归属资源（Replicaset 控制器创建 Pod）
+
+      方便反向查找创建资源的对象；方便进行级联删除
+
+  * 实践
+
+    kubectl get pods --show-labels / kubectl get pods nginx -o yaml | less
+
+    kubectl label pods nginx env=test --overwrite / kubectl label pods nginx tie-
+
+    kubectl get pods --show-labels -l env=dev,tie=front / kubectl get pods --show-labels -l 'env in (test, dev)'
+
+    kubectl annotate pods nginx my-annotate='my annotate, contains special characters'
+
+    kubectl get replicasets nginx-replicasets -o yaml | less / kubectl get pods nginx-replicasets-rhd68 -o yaml | less
+
+* 控制器模式
+
+  * 控制循环
+
+    Controller（控制器）、System（被控制的系统）、Sensor（传感器）三个逻辑组件独立运行
+
+    spec / status / diff、controller operation、system output -> 不断使系统（status）向终态（spec）趋近
+
+  * 命令式 API
+
+    命令没有响应 - 反复重试；需要记录当前的操作（复杂）
+
+    多次重试 - 巡检做修正（额外工作、危险）
+
+    多并发访问 - 需要加锁（复杂、低效）
+
+  * 声明式 API
+
+    天然地记录了状态
+
+    幂等操作、可在任意时刻反复操作
+
+    正常操作即巡检
+
+    可合并多个变更
+
+  * 控制器模式总结
+
+    声明式 API + 控制器
+
+    由声明式的 API 驱动 - k8s 资源对象
+
+    由控制器异步地控制系统向终态驱动
+
+    使系统的自动化和无人值守化成为可能
+
+    便于扩展 - 自定义资源和控制器
+
