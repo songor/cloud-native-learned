@@ -483,6 +483,10 @@
 
     一个 ReplicaSet 下的 Pod 是相同的版本
 
+  * Deployment 控制器
+
+  * ReplicaSet 控制器
+
   * spec 字段解析
 
     * MinReadySeconds
@@ -510,3 +514,132 @@
     * MaxSurge
 
       滚动过程中最多存在多少个 Pod 超过期望 replicas 数量
+
+### 应用编排与管理：Job 和 DaemonSet
+
+* Job 能帮助我们做什么事情（管理任务的控制器）
+
+  创建一个或多个 Pod 确保指定数量的 Pod 可以成功地运行或终止
+
+  跟踪 Pod 状态，根据配置及时重试失败的 Pod
+
+  确定依赖关系，保证上一个任务运行完毕后再运行下一个任务
+
+  控制任务并行度，并根据配置确保 Pod 队列大小
+
+* Job 用例
+
+  * Job 语法
+
+    ![Job 语法](https://github.com/songor/cloud-native-learned/blob/master/images/Job%20%E8%AF%AD%E6%B3%95.PNG)
+
+    restartPolicy - 重启策略
+
+    backoffLimit - 重试次数限制
+
+  * 查看 Job 状态
+
+    kubectl create -f job.yaml
+
+    kubectl get jobs
+
+    COMPLETIONS - 完成 Pod 数量 / DURATION - Job 实际业务运行时长 / AGE
+
+  * 查看 Pod
+
+    kubectl get pod -> ${job-name}-${random-suffix}
+
+    kubectl get pods pi-${random-suffix} -o yaml
+
+    kubectl logs pods pi-${random-suffix}
+
+  * 并行运行 Pod
+
+    completions / parallelism
+
+    watch "kubectl get pods"
+
+  * CronJob 语法
+
+    schedule - crontab 时间格式
+
+    startingDeadlineSeconds - Job 最长启动时间
+
+    concurrencyPolicy - 是否允许并行运行（是否等待上一个 Job 执行完成）
+
+    successfulJobsHistoryLimit - 允许留存历史 Job 个数
+
+    kubectl get cronjobs
+
+* Job 架构设计
+
+  * 管理模式
+
+    Job Controller 负责根据配置创建 Pod
+
+    Job Controller 跟踪 Job 状态，根据配置及时重试 Pod 或继续创建
+
+    Job Controller 会自动添加 label 来跟踪对应的 Pod，并根据配置并行或串行创建 Pod
+
+  * Job 控制器
+
+* DaemonSet 能帮助我们做什么事情（守护进程控制器）
+
+  保证集群内每一个（或者一些）节点都运行一组相同的 Pod
+
+  跟踪集群节点状态，保证新加入的节点自动创建对应的 Pod
+
+  跟踪集群节点状态，保证移除的节点删除对应的 Pod
+
+  跟踪 Pod 状态，保证每个节点 Pod 处于运行状态
+
+* DaemonSet 适用场景
+
+  集群存储进程 - glusterd、ceph
+
+  日志收集进程 - fluentd、logstash
+
+  需要在每个节点运行的监控收集器
+
+* DaemonSet 用例
+
+  * DaemonSet 语法
+
+    kind: DaemonSet
+
+    kubectl create -f daemonset.yaml
+
+  * 查看 DaemonSet 状态
+
+    kubectl get ds
+
+    NODE SELECTOR - 节点选择标签
+
+    kubectl get pods
+
+  * 更新 DaemonSet
+
+    * 更新策略
+
+      RollingUpdate - DaemonSet 默认更新策略，当更新 DaemonSet 模板后，老的 Pod 会被先删除，然后再去创建新的 Pod，可以配合健康检查做滚动更新
+
+      OnDelete - 当 DaemonSet 模板更新后，只有手动地删除某一个对应的 Pod，此节点 Pod 才会被更新
+
+    * 实践
+
+      kubectl set image ds/fluentd-elasticsearch fluentd-elasticsearch=fluent/fluntd:v1.4
+
+      kubectl rollout status ds/fluentd-elasticsearch
+
+* DaemonSet 架构设计
+
+  * 管理模式
+
+    DaemonSet Controller 负责根据配置创建 Pod
+
+    DaemonSet Controller 跟踪 Pod 状态，根据配置及时重试 Pod 或者继续创建
+
+    DaemonSet Controller 会自动添加 affinity & label 来跟踪对应的 Pod，并根据配置在每个节点或者适合的部分节点创建 Pod
+
+  * DaemonSet 控制器
+
