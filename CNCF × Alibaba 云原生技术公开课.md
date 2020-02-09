@@ -643,3 +643,202 @@
 
   * DaemonSet 控制器
 
+### 应用配置管理
+
+* Pod 配置管理
+
+  不可变基础设施（容器）的可变配置 - ConfigMap
+
+  敏感信息的存储和使用 - Secret
+
+  集群中 Pod 自我的身份认证 - ServiceAccount
+
+  容器运行资源的配置管理 - Sepc.Containers[].Resources.limits/requests
+
+  容器的运行安全管控 - Spec.Containers[].SecurityContext
+
+  容器启动前置条件校验 - Spec.InitContainers
+
+* ConfigMap
+
+  * 介绍
+
+    主要管理容器运行所需的配置文件，环境变量，命令行参数等可变配置。用于解耦容器镜像和可变配置，从而保障工作负载（Pod）的可移植性
+
+    ![ConfigMap](https://github.com/songor/cloud-native-learned/blob/master/images/ConfigMap.PNG)
+
+  * 创建
+
+    kubectl create configmap [NAME] [DATA]
+
+    [DATA] - 指定文件或者目录；指定键值对
+
+    kubectl create configmap kube-flannel-cfg --from-file=configure-pod-container/configmap/cni-conf.json -n kube-system -> 文件名为 Key，文件内容为 Value
+
+    kubectl create configmap special-config --from-literal=special.how=very --from-literal=special.type=charm -> 键值对
+
+  * 使用
+
+    环境变量 -> Pod.spec.containers[].env[].valueFrom.configMapKeyRef.name / key
+
+    命令行参数 -> Pod.spec.containers[].command ${}
+
+    挂载配置文件 -> Pod.spec.containers[].volumeMounts[].name / mountPath
+
+  * 注意
+
+    ConfigMap 文件大小限制 1MB（etcd 要求）
+
+    Pod 只能引用相同 Namespace 中的 ConfigMap
+
+    Pod 引用的 ConfigMap 不存在时，Pod 无法创建成功，即 Pod 创建前需要先创建好 ConfigMap
+
+    ConfigMap 配置环境变量时，如果 ConfigMap 中的某些 key 被认为无效，该环境变量将不会注入容器，但是 Pod 可以正常创建
+
+    只有通过 k8s api 创建的 Pod 才能使用 ConfigMap，其他方式创建的 Pod（如 manifest 创建的 static pod）不能使用 ConfigMap
+
+* Secret
+
+  * 介绍
+
+    集群中用于存储密码，token 等敏感信息的资源对象，其中的敏感数据采用 Base64 编码保存
+
+    ![Secret](https://github.com/songor/cloud-native-learned/blob/master/images/Secret.PNG)
+
+  * 创建
+
+    可以用户自己创建，也有系统自动创建（k8s 为每个 Namespace 的默认用户 default ServiceAccount 创建 Secret）
+
+    kubectl create secret generic [NAME] [DATA] [TYPE]
+
+    [DATA] - 指定文件、键值对
+
+    [TYPE] - 默认为 Opaque
+
+    kubectl create secret generic myregistrykey --from-file=.dockerconfigjson=/root/.docker/config.json --type=kubernetes.io/dockerconfigjson
+
+    kubectl create secret generic prod-db-secret --from-literal=username=produser --from-literal=password=Y4nys7f11
+
+  * 使用
+
+    一般通过 volume 挂载到指定容器目录，供容器中业务使用；另外在需要访问私有镜像仓库时，也可以引用 Secret 来实现
+
+    Pod.spec.volumes[].secret.secretName
+
+    Pod.spec.containers[].volumeMounts[].name / mountPath
+
+  * 使用私有镜像仓库
+
+    Pod.spec.imagePullSecrets
+
+    ServiceAccount.imagePullSecrets
+
+  * 注意
+
+    Secret 文件大小限制 1MB
+
+    机密信息采用 Secret 存储仍需要慎重考虑；可以考虑 Kubernetes + Vault 来解决敏感信息的加密和权限管理
+
+    不建议采取 list / watch 获取 Secret 信息，而推荐使用 get 获取需要的 Secret，从而减少更多 Secret 暴露的可能性
+
+* ServiceAccount
+
+  * 介绍
+
+    主要用于解决 Pod 在集群中的身份认证问题；其中认证使用的授权信息，利用 Secret 进行管理
+
+    ![ServiceAccount](https://github.com/songor/cloud-native-learned/blob/master/images/ServiceAccount.PNG)
+
+  * Pod 里的应用访问它所属的 k8s 集群
+
+    Pod 创建时 Admission Controller 会根据指定的 ServiceAccount（默认为 default）把对应的 Secret 挂载到容器中固定的目录下（/var/run/secrets/kubernetes.io/serviceaccount），k8s 自动实现
+
+    当 Pod 访问集群时，可以利用 Secret 中的 token 文件来认证 Pod 身份（ca.crt 用于校验服务端）
+
+    默认的 token 认证信息：
+
+    Group - system:serviceaccounts:[namespace-name]
+
+    User - system:serviceaccount:[namespace-name]:[pod-name]
+
+    Pod 身份被认证合法后，其权限需要通过 RBAC 功能来配置
+
+* Resource
+
+  容器资源配置管理
+
+  ![Resource](https://github.com/songor/cloud-native-learned/blob/master/images/Resource.PNG)
+
+  * 支持资源类型
+
+    CPU（单位 millicore，1 Core = 1000 millicore）、Memory、ephemeral storage（临时存储）、自定义资源
+
+  * 配置方法
+
+    资源配置分为 request / limit 两种类型
+
+    * CPU
+
+      spec.containers[].resources.limits.cpu
+
+      spec.containers[].resources.requests.cpu
+
+    * Memory
+
+      spec.containers[].resources.limits.memory
+
+      spec.containers[].resources.requests.memory
+
+    * ephemeral storage
+
+      spec.containers[].resources.limits.ephemeral-storage
+
+      spec.containers[].resources.requests.ephemeral-storage
+
+  * Pod 服务质量（QoS）配置
+
+    当节点上资源不足时，将依据 BestEffort，Burstable，Guaranteed 的优先顺序驱逐 Pod
+
+    * Guaranteed
+
+      Pod 里的每个容器都必须有 CPU / 内存限制和请求，而且必须是一样的
+
+    * Burstable
+
+      非 Guaranteed
+
+      Pod 里至少有一个容器有 CPU / 内存请求
+
+    * BestEffort
+
+      非 Guaranteed
+
+      非 Burstable
+
+* SecurityContext
+
+  主要用于限制容器的行为，从而保障系统和其他容器的安全
+
+  ![SecurityContext](https://github.com/songor/cloud-native-learned/blob/master/images/SecurityContext.PNG)
+
+  * 分类
+
+    容器级别的 SecurityContext，仅对指定容器有效
+
+    Pod 级别的 SecurityContext，对指定 Pod 中的所有容器生效
+
+    Pod Security Policies（PSP），对集群内所有 Pod 生效
+
+  * 权限和访问控制设置项
+
+    Discretionary Access Control / SELinux / privileged / Linux Capabilities / AppArmor / Seccomp / AllowPrivilegeEscalation
+
+* InitContainer
+
+  InitContainer 会先于普通 Container 启动执行，直到所有 InitContainer 执行成功后，普通 Container 才会被启动
+
+  Pod 中多个 InitContainer 之间是按次序依次启动执行，而 Pod 中多个普通 Container 是并行启动
+
+  InitContainer 执行成功后就结束退出了，而普通 Container 可能会一直执行或者重启
+
+  一般 InitContainer 用于普通 Container 启动前的初始化（如配置文件准备）或前置条件检测（如网络连通检测）
