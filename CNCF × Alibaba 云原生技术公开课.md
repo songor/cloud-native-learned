@@ -411,3 +411,102 @@
 
     便于扩展 - 自定义资源和控制器
 
+### 应用编排与管理：Deployment
+
+* Deployment 能帮助我们做什么事情（管理部署发布的控制器）
+
+  定义一组 Pod 的期望数量，Controller 会维持 Pod 数量与期望数量一致
+
+  配置 Pod 发布方式，Controller 会按照给定策略更新 Pod，保证更新过程中不可用的 Pod 数量在限定范围内
+
+  如果发布有问题，支持“一键”回滚
+
+* Deployment 用例
+
+  * Deployment 语法
+
+    ![Deployment 语法](https://github.com/songor/cloud-native-learned/blob/master/images/Deployment%20%E8%AF%AD%E6%B3%95.PNG)
+
+  * 查看 Deployment 状态
+
+    kubectl create -f nginx-deployment.yaml
+
+    kubectl get deployment nginx-deployment
+
+    DESIRED - 期望 pod 数量 replicas / CURRENT - 当前实际 pod 数量 / UP-TO-DATE - 到达期望版本 pod 数量 / AVAILABLE / AGE
+
+    kubectl edit deployment nginx-deployment
+
+  * 查看 Pod
+
+    kubectl get pod -> ${deployment-name}-${template-hash}-${ramdom-suffix}
+
+    kubectl get pod nginx-deployment-${template-hash}-${ramdom-suffix} -o yaml -> ownerReferences 是 ReplicaSet 而非 Deployment
+
+    kubectl edit pod nginx-deployment-${template-hash}-${ramdom-suffix}
+
+    kubectl get replicaset
+
+  * 更新镜像
+
+    kubectl set image deployment.v1.apps nginx-deployment nginx=nginx:1.9.1
+
+    set image - 设置镜像
+
+    deployment.v1.apps - 资源类型，也可以写为 deployment 或 deployment.apps
+
+    nginx-deployment - 要更新的 Deployment 名字
+
+    nginx= - 要更新的容器名字
+
+    nginx:1.9.1 - 新的镜像
+
+  * 快速回滚
+
+    kubectl rollout undo deployment nginx-deployment - 回滚到 Deployment 上一个版本
+
+    kubectl rollout undo deployment.v1.apps nginx-deployment --to-revision=2 - 回滚 Deployment 到某一个版本
+
+    kubectl rollout history deployment.v1.apps nginx-deployment - 版本列表
+
+  * DeploymentStatus
+
+    ![DeploymentStatus](https://github.com/songor/cloud-native-learned/blob/master/images/DeploymentStatus.PNG)
+
+* 架构设计
+
+  * 管理模式
+
+    Deployment 只负责管理不同版本的 ReplicaSet，由 ReplicaSet 管理 Pod 副本数
+
+    每个 ReplicaSet 对应了 Deployment template 的一个版本
+
+    一个 ReplicaSet 下的 Pod 是相同的版本
+
+  * spec 字段解析
+
+    * MinReadySeconds
+
+      Deployment 判断 Pod 是否为 Available 的最小 Ready 时间
+
+    * RevisionHistoryLimit
+
+      保留历史 ReplicaSet 的数量，默认为 10
+
+    * Paused
+
+      标识 Deployment 只做数量维持，不做新的发布
+
+    * ProgressDeadlineSeconds
+
+      Deployment Status Processing -> Failed 最大时间 
+
+  * 升级策略字段解析
+
+    * MaxUnavailable
+
+      滚动过程中最多有多少个 Pod 不可用
+
+    * MaxSurge
+
+      滚动过程中最多存在多少个 Pod 超过期望 replicas 数量
