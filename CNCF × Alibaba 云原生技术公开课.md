@@ -842,3 +842,136 @@
   InitContainer 执行成功后就结束退出了，而普通 Container 可能会一直执行或者重启
 
   一般 InitContainer 用于普通 Container 启动前的初始化（如配置文件准备）或前置条件检测（如网络连通检测）
+
+### 应用存储和持久化数据卷：核心知识
+
+* Kubernetes Volume 类型
+
+  * 本地存储
+
+    emptyDir / hostPath
+
+  * 网络存储
+
+    in-tree - awsElasticBlockStore / gcePersistentDisk / nfs
+
+    out-of-tree - flexvolume / iscsi
+
+  * Projected Volume
+
+    Secret / ConfigMap / DownwardAPI / ServiceAccountToken
+
+  * PVC 与 PV 体系
+
+* Pod Volumes
+
+  * 使用场景
+
+    一个 Pod 中某一个容器异常退出，被 kubelet 拉起如何保证之前产生的重要数据不丢
+
+    同一个 Pod 多个容器如何共享数据
+
+  * 不足
+
+    Pod 中声明的 Volume 的生命周期与 Pod 相同，无法准确表达 Volume 复用、共享语义，新功能扩展很难实现，无法满足场景：Pod 销毁重建 / 宿主机故障迁移 / 多 Pod 共享同一个 Volume / Volume Snapshot、Resize 等功能的扩展实现
+
+  * 使用
+
+    Pod.spec.volumes[] 声明 Pod 的 Volumes 信息
+
+    Pod.spec.containers[].volumeMounts[] 声明 Container 如何使用 Pod 的 Volumes
+
+    多个 Container 共享同一个 Volume 时，可以通过 Pod.spec.containers[].volumeMounts[].subPath 隔离不同容器在同一个 Volume 上数据存储的路径
+
+    emptyDir - Pod 删除之后该目录也会被清除
+
+    hostPath - 宿主机上路径，Pod 删除之后该目录仍然存在
+
+* Persistent Volumes（PV）
+
+  优化 Pod Volumes：将存储与计算分离，使用不同的组件管理存储与计算资源，解耦 Pod 与 Volume 的生命周期关联
+
+  * Static Volume Provisioning
+
+    Cluster Admin 需要提前规划或预测存储需求，而用户的需求是多样化的，很容易导致用户提交的 PVC 找不到合适的 PV
+
+    * 使用
+
+      系统管理员预先创建 PV
+
+      PersisentVolume.spec.capacity.storage - 该 volume 的总容量大小
+
+      PersisentVolume.spec.accessModes - PV 访问策略控制列表，必须同 PVC 的访问策略控制列表匹配才能绑定；ReadWriteOnce（只允许单个 Node 访问），ReadOnlyMany（允许多个 Node 只读访问），ReadWriteMany（允许多个 Node 读写访问）
+
+      PersisentVolume.spec.persistentVolumeReclaimPolicy - PV 被 release 之后（与之绑定的 PVC 被删除）回收再利用策略；Delete（volume 被 release 之后直接 delete），Retain（默认策略，由系统管理员来手动管理该 volume）
+
+      PersisentVolume.spec.csi.driver - 指定由什么 volume plugin 来挂载该 volume（需要提前在 node 上部署）
+
+      用户创建 PVC
+
+      PersistentVolumeClaim.spec.accessModes
+
+      PersistentVolumeClaim.spec.resources.requests.storage
+
+      用户创建 Pod
+
+      Pod.spec.volumes[].persistentVolumeClaim.claimName
+
+  * Dynamic Volume Provisioning
+
+    Cluster Admin 只创建不同类型存储的模板（StorageClass），用户在 PVC 中指定使用哪种存储模板以及自己需要的大小、访问方式等参数，然后 k8s 自动生成相应的 PV 对象（k8s 结合 PVC 和 SC 两者的信息动态创建 PV 对象）
+    
+    * 使用
+    
+      系统管理员创建 StorageClass
+    
+      StorageClass.provisioner - 指定使用什么 volume plugin 来 create / delete / attach / detach / mount / unmount PV
+    
+      StorageClass.parameters
+    
+      StorageClass.reclaimPolicy
+    
+      用户创建 PVC
+    
+      PersistentVolumeClaim.spec.accessModes
+    
+      PersistentVolumeClaim.spec.resources.requests.storage
+    
+      PersistentVolumeClaim.spec.storageClassName
+    
+      用户创建 Pod
+    
+      Pod.spec.volumes[].persistentVolumeClaim.claimName
+    
+  * PV 状态流转
+
+    create PV -> pending -> available -> bound -> released -> deleted / failed
+
+    到达 released 状态的 PV 无法根据 Reclaim Policy 回到 available 状态而再次绑定新的 PVC，此时，如果想复用原来 PV 对应的存储中的数据，复用旧的 PV 中记录的存储信息新建 PV 对象 / 复用 PVC 对象，即不解绑 PVC 和 PV
+
+* PersistentVolumeClaim（PVC）
+
+  职责分离，PVC 中只用申明自己需要的存储 size，access mode 等业务真正关心的存储需求（不用关心存储实现细节），PV 和其对应的后端存储信息则交给 cluster admin 统一运维和管控，安全访问策略更容易控制
+
+  PVC 简化了用户对存储的需求，PV 才是存储的实际信息的承载体，通过 kube-controller-manager 中的 PersistentVolumeController 将 PVC 与合适的 PV 绑定到一起，从而满足用户对存储的需求
+
+  PVC 像是面向对象编程中抽象出来的接口，PV 是接口对应的实现
+
+* 实践
+
+  Static：
+
+  kubectl create -f nas_pv.yaml / kubectl create -f nas_pvc.yaml / kubectl create -f dp_nas_demo.yaml
+
+  kubectl get pv
+
+  kubectl delete -f dp_nas_demo.yaml / kubectl delete -f nas_pvc.yaml / kubectl delete -f nas_pv.yaml
+
+  Dynamic：
+
+  kubectl create -f storageclass_disk.yaml / kubectl create -f disk_pvc.yaml
+
+* k8s 对 PVC / PV 体系的完整处理流程
+
+  create -> attach -> mount
+
