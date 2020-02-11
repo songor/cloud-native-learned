@@ -975,3 +975,88 @@
 
   create -> attach -> mount
 
+### 应用存储和持久化数据卷：存储快照与拓扑调度
+
+* 存储快照
+
+  * 产生背景
+
+    保证重要数据在误操作之后可以快速恢复，以提高操作容错率
+
+    快速进行复制、迁移重要数据
+
+  * snapshot
+
+    PVC -> StorageClass -> PV
+
+    VolumeSnapshot -> VolumeSnapshotClass -> VolumeSnapshotContent
+
+    * 示例
+
+      创建 VolumeSnapshotClass 对象：
+
+      VolumeSnapshotClass.snapshotter: diskplugin.csi.alibabacloud.com - 指定 Volume Plugin
+
+      创建 VolumeSnapshot 对象：
+
+      VolumeSnapshot.spec.snapshotClassName
+
+      VolumeSnapshot.spec.source.name - Snapshot 的数据源
+
+      VolumeSnapshot.spec.source.kind: PersistentVolumeClaim
+
+  * restore
+
+    PersistentVolumeClaim 扩展字段 spec.dataSource 可以指定为 VolumeSnapshot 对象，从而根据 PVC 对象生成新的 PV 对象，对应的存储数据是从 VolumeSnapshot 关联的 VolumeSnapshotContent 恢复的
+
+    * 示例
+
+      PersistentVolumeClaim.spec.dataSource.name
+
+      PersistentVolumeClaim.spec.dataSource.kind: VolumeSnapshot
+
+* 拓扑的含义
+
+  对 k8s 集群中 nodes 的“位置”关系一种人为划分规则，通过在 node 的 labels 中设置标识自己属于具体的拓扑域
+
+  kubernetes.io/hostname=ip-172-20-114-199.ec2.internal - hostname
+
+  failure-domain.beta.kubernetes.io/region=us-east-1 - region
+
+  failure-domain.beta.kubernetes.io/zone=us-east-1c - zone
+
+  也可以自定义一个 key: value pair 来定义一个具体的拓扑域
+
+* 存储拓扑调度
+
+  * 产生背景
+
+    k8s 中通过 PVC&PC 体系将存储与计算分离，使用不同的 Controllers 管理存储资源和计算资源。但如果创建的 PV 有访问“位置”（spec.nodeAffinity）的限制，也就是只有在特定的一些 nodes 上才能访问 PV，原有的创建 Pod 的流程与创建 PV 的流程分离，就无法保证新创建的 Pod 被调度到可以访问 PV 的 node 上，最终导致 Pod 无法正常运行。如 Local PV 只能在指定的 Node 上被 Pod 使用；单 Region 多 Zone 的 k8s 集群，阿里巴巴云盘当前只能被同一个 Zone 的 Node 上的 Pod 访问
+
+  * 本质问题
+
+    Static / Dynamic Volume Provisioning PV 时，不知道使用它的 Pod 会被调度到哪些 Node 上，但 PV 本身的访问对 Node 的“位置”（拓扑）有限制
+
+  * 流程改进
+
+    Static / Dynamic Volume Provisioning PV 的操作延迟到 Pod 调度结果确定之后
+
+  * k8s 相关组件改进
+
+    PV Controller - 支持延迟绑定
+
+    Dynamic PV Provisioner - 动态创建 PV 时要结合 Pod 待运行的 Node 的“位置”信息
+
+    Scheduler - 选择 Node 时要考虑 Pod 的 PVC 绑定需求
+
+  * 示例
+
+    * Dynamic Provision PV 拓扑
+
+      StorageClass.volumeBindingMode: WaitForFirstConsumer
+
+      StorageClass.allowedTopologies
+
+      当 PVC 对象被创建之后由于对应的 StorageClass 的 volumeBindingMode 为 WaitForFirstConsumer，并不会马上动态生成 PV 对象，而要等到使用该 PVC 对象的第一个 Pod 调度结果出来之后；并且 kube-scheduler 在调度 Pod 的时候会去选择满足 StorageClass.allowedTopologies 中指定的拓扑限制的 Nodes
+
+
