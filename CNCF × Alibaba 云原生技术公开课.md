@@ -1060,3 +1060,87 @@
       当 PVC 对象被创建之后由于对应的 StorageClass 的 volumeBindingMode 为 WaitForFirstConsumer，并不会马上动态生成 PV 对象，而要等到使用该 PVC 对象的第一个 Pod 调度结果出来之后；并且 kube-scheduler 在调度 Pod 的时候会去选择满足 StorageClass.allowedTopologies 中指定的拓扑限制的 Nodes
 
 
+### 可观测性：你的应用健康吗
+
+* 如何保障应用健康稳定
+
+  提高应用的可观测性（应用健康状态、应用资源使用、应用实时日志），提高应用的可恢复能力（应用出现问题需要降低影响范围，进行问题调试、诊断；可以通过自愈机制恢复）
+
+* Liveness（存活探针） 与 Readness（就绪探针）
+
+  * 探测方式
+
+    HttpGet - 通过发送 HTTP Get 请求返回 200-399 状态码则表明容器健康
+
+    Exec - 通过执行命令来检查服务是否正常，命令返回值为 0 则表示容器健康
+
+    TcpSocket - 通过容器的 IP 和 Port 执行 TCP 检查，如果能够建立 TCP 连接则表明容器健康
+
+  * 探测结果
+
+    Success、Failure、Unknown
+
+  * 重启策略
+
+    Always、OnFailure、Never
+
+  * Pod Probe Spec
+
+    Pod.spec.containers.livenessProbe / readinessProbe.httpGet / exec / tcpSocket
+
+    initialDelaySeconds - Pod 启动后延迟多久进行检查
+
+    periodSeconds - 检查的间隔时间
+
+    timeoutSeconds - 探测的超时时间
+
+    successThreshold - 探测失败后再次判断成功的阈值
+
+    failureThreshold - 探测失败的重试次数
+
+  * Liveness
+
+    用于判断容器是否存活，即 Pod 状态是否为 Running，如果探测结果不成功，则会触发 kubelet 杀掉容器，并根据配置的策略判断是否重启容器，如果默认不配置 Liveness 探针，则认为返回值默认为成功，适用于支持重新拉起的应用
+
+  * Readness
+
+    用于判断容器是否启动完成，即 Pod 状态是否为 Ready，如果探测结果不成功，则会将 Pod 从 Endpoint 中移除（切断上层流量到 Pod），直至下次判断成功，再将 Pod 挂回到 Endpoint 上，适用于启动后无法立即对外服务的应用
+
+  * 合适的探测方式
+
+    调大判断的超时阈值，防止在容器压力较高的情况下出现偶发超时
+
+    调整判断的次数阈值，3 次的默认值在短周期下不一定是最佳实践
+
+    Exec 执行的 Shell 脚本判断容器中可能调用时间会非常长
+
+    TcpSocket 遇到 TLS 场景
+
+* 状态机制 & 常见应用异常
+
+  Pod 停留在 Pending - 调度器没有介入，可以通过 kubectl describe pod 查看事件进行排查，通常和资源使用相关
+
+  Pod 停留在 Waiting - 一般表示 Pod 的镜像没有正常拉取
+
+  Pod 不断被拉起且可以看到 Crashing - 一般表示 Pod 已经完成调度并启动，但是启动失败，通常由于配置、权限造成，需查看 Pod 日志
+
+  Pod 处在 Running 但是没有正常工作 - 通常由于部分字段拼写错误造成的，可以通过校验部署来排查，例如 kubectl apply --validate -f pod.yaml
+
+  Service 无法正常工作 - 在排除网络插件自身的问题外，最可能的是 label 配置有问题，可以通过查看 endpoint 的方式进行检查
+
+*  应用远程调试
+
+  * Pod 远程调试
+
+    kubectl exec -it pod-name /bin/bash
+
+    kubectl exec -it pod-name -c container-name /bin/bash
+
+  * Service 远程调试
+
+    使用 Telepresence 将本地的应用代理到集群中的一个 Service 上
+
+    本地开发的应用需要调用集群中的服务 - kubectl port-forward svc/app -n app-namespace
+
+  * kubectl-debug
+
