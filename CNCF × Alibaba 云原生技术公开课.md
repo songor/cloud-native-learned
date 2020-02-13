@@ -1198,3 +1198,54 @@
 
 ### Kubernetes 网络概念及策略控制
 
+### Kubernetes Service
+
+* Kubernetes 中的服务发现与负载均衡
+
+  * Kubernetes 应用间如何相互调用
+
+    Pod 生命周期短暂，IP 地址随时变化
+
+    Deployment 的 Pod 组需要统一访问入口和做负载均衡
+
+    在不同环境部署时保持同样的部署拓扑和访问方式
+
+  * 应用服务如何暴露到外部访问和负载均衡
+
+* Service 语法
+
+  Service.spec.selector.app - Pod 选择器
+
+  Service.spec.ports[].protocol / port / targetPort
+
+* 创建和查看 Service
+
+  kubectl create -f server.yaml / kubectl get pod -o wide -l run=nginx
+
+  kubectl create -f service.yaml / kubectl describe svc -> IP / Endpoints
+
+* 集群内访问 Service
+
+  * Service 的 ClusterIP
+
+  * 访问服务名，依靠 DNS 解析
+
+    {servicename}.{namespace}
+
+  * 环境变量
+
+    env
+
+    $NGINX_SERVICE_HOST
+
+* Headless Service
+
+  Service.spec.clusterIP: None - 不再通过虚拟 IP 负载均衡
+
+  通过 servicename 方式直接解析到后端所有的 Pod IP，客户端自主选择需要访问的 Pod
+
+* 向集群外暴露 Service
+
+  Service.spec.type: LoadBalancer
+
+  LoadBalancer -> NodePort -> ClusterIP
