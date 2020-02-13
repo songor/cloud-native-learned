@@ -1198,6 +1198,52 @@
 
 ### Kubernetes 网络概念及策略控制
 
+* 基本法：约法三章 + 四大目标
+
+  * Kubernetes 对于 Pod 间的网络没有任何限制，只需要满足如下“三个基本条件”
+
+    所有 Pod 可以与其他 Pod 直接通信，无需显式使用 NAT
+
+    所有 Node 可以与所有 Pod 直接通信，无需显式使用 NAT
+
+    Pod 可见的 IP 地址为其他 Pod 与其通信时所用，无需显式转换
+
+  * 基于以上准入条件，我们在审视一个网络方案的时候，需要考虑如下“四大目标”
+
+    容器与容器间的通信
+
+    Pod 与 Pod 之间的通信
+
+    Pod 与 Service 间的通信
+
+    外部世界与 Service 间的通信
+
+*  Per Node Per IP
+
+* Network Namespace
+
+  Network Namespace 是实现网络虚拟化的内核基础，创建了隔离的网络空间：
+
+  拥有独立的附属网络设备
+
+  独立的协议栈，IP 地址和路由表
+
+  iptables 规则
+
+  ipvs 等
+
+* Pod 与 Network Namespace 的关系
+
+  每个 Pod 拥有独立的 Network Namespace 空间，Pod 内的 Container 共享该空间，可通过 Loopback 接口实现通信，或通过共享的 Pod IP 对外提供服务
+
+* 典型容器网络实现方案
+
+* Network Policy
+
+  Network Policy 提供了基于策略的网络控制，用于隔离应用并减少攻击面。它使用标签选择器模拟传统的分段网络，并通过策略控制它们之间的流量以及来自外部的流量
+
+  通过使用标签选择器（namespaceSelector，podSelector）来控制 Pod 之间的流量
+
 ### Kubernetes Service
 
 * Kubernetes 中的服务发现与负载均衡
@@ -1249,3 +1295,5 @@
   Service.spec.type: LoadBalancer
 
   LoadBalancer -> NodePort -> ClusterIP
+
+  kubectl get svc -o wide -> EXTERNAL-IP
