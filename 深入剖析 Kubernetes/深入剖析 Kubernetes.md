@@ -32,3 +32,47 @@
 
 ### 04 | 预习篇 · 小鲸鱼大事记（四）：尘埃落定
 
+### 05 | 白话容器基础（一）：从进程说开去
+
+* "边界"
+
+  容器技术的核心功能，就是通过约束和修改进程的动态表现，从而为其创造出一个“边界”。
+
+  对于 Docker 等大多数 Linux 容器来说，Cgroups 技术是用来制造约束的主要手段，而 Namespace 技术则是用来修改进程视图的主要方法。
+
+  ```sh
+  docker run -it busybox /bin/sh
+  
+  / # ps
+  PID   USER     TIME  COMMAND
+      1 root      0:00 /bin/sh
+      6 root      0:00 ps
+  ```
+
+  可以看到，我们在 Docker 里最开始执行的 /bin/sh，就是这个容器内部的第 1 号进程（PID=1），而这个容器里一共只有两个进程在运行。这就意味着，前面执行的 /bin/sh，以及我们刚刚执行的 ps，已经被 Docker 隔离在了一个跟宿主机完全不同的世界当中。
+
+  这种技术，就是 Linux 里面的 Namespace 机制。而 Namespace 的使用方式也非常有意思：它其实只是 Linux 创建新进程的一个可选参数，比如：`int pid = clone(main_function, stack_size, CLONE_NEWPID | SIGCHLD, NULL); `。
+
+  而除了我们刚刚用到的 PID Namespace，Linux 操作系统还提供了 Mount、UTS、IPC、Network 和 User 这些 Namespace，用来对各种不同的进程上下文进行“障眼法”操作。
+
+  比如，Mount Namespace，用于让被隔离进程只看到当前 Namespace 里的挂载点信息；Network Namespace，用于让被隔离进程看到当前 Namespace 里的网络设备和配置。
+
+  这，就是 Linux 容器最基本的实现原理了。
+
+  所以，Docker 容器这个听起来玄而又玄的概念，实际上是在创建容器进程时，指定了这个进程所需要启用的一组 Namespace 参数。这样，容器就只能“看”到当前 Namespace 所限定的资源、文件、设备、状态，或者配置。而对于宿主机以及其他不相关的程序，它就完全看不到了。
+
+  所以说，容器，其实是一种特殊的进程而已。
+
+* 虚拟机 vs Docker
+
+  ![虚拟机 vs Docker](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/%E8%99%9A%E6%8B%9F%E6%9C%BA%20vs%20Docker.jpg)
+
+  这幅图的左边，画出了虚拟机的工作原理。其中，名为 Hypervisor 的软件是虚拟机最主要的部分。它通过硬件虚拟化功能，模拟出了运行一个操作系统需要的各种硬件，比如 CPU、内存、I/O 设备等等。然后，它在这些虚拟的硬件上安装了一个新的操作系统，即 Guest OS。
+
+  这样，用户的应用进程就可以运行在这个虚拟的机器中，它能看到的自然也只有 Guest OS 的文件和目录，以及这个机器里的虚拟设备。这就是为什么虚拟机也能起到将不同的应用进程相互隔离的作用。
+
+  在理解了 Namespace 的工作方式之后，你就会明白，跟真实存在的虚拟机不同，在使用 Docker 的时候，并没有一个真正的“Docker 容器”运行在宿主机里面。Docker 项目帮助用户启动的，还是原来的应用进程，只不过在创建这些进程时，Docker 为它们加上了各种各样的 Namespace 参数。
+
+  这时，这些进程就会觉得自己是各自 PID Namespace 里的第 1 号进程，只能看到各自 Mount Namespace 里挂载的目录和文件，只能访问到各自 Network Namespace 里的网络设备，就仿佛运行在一个个“容器”里面，与世隔绝。
+
+  不过，相信你此刻已经会心一笑：这些不过都是“障眼法”罢了。
