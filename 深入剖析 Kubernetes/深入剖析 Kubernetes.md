@@ -421,7 +421,7 @@
 
   Kubernetes 项目最主要的设计思想是，从更宏观的角度，以统一的方式来定义任务之间的各种关系，并且为将来支持更多种类的关系留有余地。
 
-  ![Kubernetes 核心功能全景图](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/Docker%20%E5%AE%B9%E5%99%A8%E5%85%A8%E6%99%AF%E5%9B%BE.jpg)
+  ![Kubernetes 核心功能全景图](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/Kubernetes%20%E6%A0%B8%E5%BF%83%E5%8A%9F%E8%83%BD%E5%85%A8%E6%99%AF%E5%9B%BE.jpg)
 
   在 Kubernetes 项目中，我们所推崇的使用方法是：首先，通过一个“编排对象”，比如 Pod、Job、CronJob 等，来描述你试图管理的应用；然后，再为它定义一些“服务对象”，比如 Service、Secret、Horizontal Pod Autoscaler（自动水平扩展器）等。这些对象，会负责具体的平台级功能。
 
