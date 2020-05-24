@@ -498,3 +498,35 @@
   在这里，我强烈推荐你在使用 kubeadm init 部署 Master 节点时，使用下面这条指令：
 
   `kubeadm init --config kubeadm.yaml`
+
+### 11 | 从 0 到 1：搭建一个完整的 Kubernetes 集群
+
+* Taint/Toleration
+
+  一旦某个节点被加上了一个 Taint，即被“打上了污点”，那么所有 Pod 就都不能在这个节点上运行，因为 Kubernetes 的 Pod 都有“洁癖”。
+
+  除非，有个别的 Pod 声明自己能“容忍”这个“污点”，即声明了 Toleration，它才可以在这个节点上运行。
+
+  `kubectl describe node master`
+
+  可以看到，Master 节点默认被加上了 node-role.kubernetes.io/master:NoSchedule 这样一个“污点”，其中“键”是 node-role.kubernetes.io/master，而没有提供“值”。
+
+  如果你就是想要一个单节点的 Kubernetes，删除这个 Taint 才是正确的选择：
+
+  `kubectl taint nodes --all node-role.kubernetes.io/master-`
+
+  如上所示，我们在 “node-role.kubernetes.io/master” 这个键后面加上了一个短横线 “-”，这个格式就意味着移除所有以 “node-role.kubernetes.io/master” 为键的 Taint。
+
+* 无状态
+
+  很多时候我们需要用数据卷（Volume）把外面宿主机上的目录或者文件挂载进容器的 Mount Namespace 中，从而达到容器和宿主机共享这些目录或者文件的目的。容器里的应用，也就可以在这些数据卷中新建和写入文件。
+
+  可是，如果你在某一台机器上启动的一个容器，显然无法看到其他机器上的容器在它们的数据卷里写入的文件。这是容器最典型的特征之一：无状态。
+
+* 持久化
+
+  而容器的持久化存储，就是用来保存容器存储状态的重要手段：存储插件会在容器里挂载一个基于网络或者其他机制的远程数据卷，使得在容器里创建的文件，实际上是保存在远程存储服务器上，或者以分布式的方式保存在多个节点上，而与当前宿主机没有任何绑定关系。这样，无论你在其他哪个宿主机上启动新的容器，都可以请求挂载指定的持久化存储卷，从而访问到数据卷里保存的内容。这就是“持久化”的含义。
+
+* Kubernetes 集群
+
+  这个集群有一个 Master 节点和多个 Worker 节点；使用 Weave 作为容器网络插件；使用 Rook 作为容器持久化存储插件；使用 Dashboard 插件提供了可视化的 Web 界面。
