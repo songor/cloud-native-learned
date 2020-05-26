@@ -816,3 +816,43 @@
   这里有一个问题：如果你定义了同时作用于一个 Pod 对象的多个 PodPreset，会发生什么呢？
 
   实际上，Kubernetes 项目会帮你合并（Merge）这两个 PodPreset 要做的修改。而如果它们要做的修改有冲突的话，这些冲突字段就不会被修改。
+
+### 16 | 编排其实很简单：谈谈“控制器”模型
+
+* kube-controller-manager
+
+  实际上，这个组件，就是一系列控制器的集合。
+
+  `kubernetes/pkg/controller/`
+
+  这个目录下面的每一个控制器，都以独有的方式负责某种编排功能。
+
+  实际上，这些控制器之所以被统一放在 pkg/controller 目录下，就是因为它们都遵循 Kubernetes 项目中的一个通用编排模式，即：控制循环（control loop）。
+
+* 控制循环
+
+  在具体实现中，实际状态往往来自于 Kubernetes 集群本身。
+
+  而期望状态，一般来自于用户提交的 YAML 文件。
+
+  接下来，以 Deployment 为例，我和你简单描述一下它对控制器模型的实现：
+
+  Deployment 控制器从 Etcd 中获取到所有携带了“app: nginx”标签的 Pod，然后统计它们的数量，这就是实际状态；
+
+  Deployment 对象的 Replicas 字段的值就是期望状态；
+
+  Deployment 控制器将两个状态做比较，然后根据比较结果，确定是创建 Pod，还是删除已有的 Pod。
+
+  可以看到，一个 Kubernetes 对象的主要编排逻辑，实际上是在第三步的“对比”阶段完成的。这个操作，通常被叫作调谐（Reconcile）。这个调谐的过程，则被称作“Reconcile Loop”（调谐循环）或者“Sync Loop”（同步循环）。
+
+* 控制器
+
+  这个控制器对象本身，负责定义被管理对象的期望状态。
+
+  而被控制对象的定义，则来自于一个“模板”。
+
+  可以看到，Deployment 这个 template 字段里的内容，跟一个标准的 Pod 对象的 API 定义，丝毫不差。而所有被这个 Deployment 管理的 Pod 实例，其实都是根据这个 template 字段的内容创建出来的。
+
+  像 Deployment 定义的 template 字段，在 Kubernetes 项目中有一个专有的名字，叫作 PodTemplate（Pod 模板）。
+
+  类似 Deployment 这样的一个控制器，实际上都是由上半部分的控制器定义（包括期望状态），加上下半部分的被控制对象的模板组成的。
