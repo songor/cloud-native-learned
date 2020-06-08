@@ -1433,3 +1433,104 @@
 
 ### 21 | 容器化守护进程的意义：DaemonSet
 
+* Daemon Pod 三个特征
+
+  这个 Pod 运行在 Kubernetes 集群里的每一个节点（Node）上；
+
+  每个节点上只有一个这样的 Pod 实例；
+
+  当有新的节点加入 Kubernetes 集群后，该 Pod 会自动地在新节点上被创建出来；而当旧节点被删除后，它上面的 Pod 也相应地会被回收掉。
+
+* DaemonSet Controller
+
+  首先从 Etcd 里获取所有的 Node 列表，然后遍历所有的 Node。这时，它就可以很容易地去检查，当前这个 Node 上是不是有一个携带了 name=fluentd-elasticsearch 标签的 Pod 在运行。
+
+  而检查的结果，可能有这么三种情况：
+
+  没有这种 Pod，那么就意味着要在这个 Node 上创建这样一个 Pod；
+
+  有这种 Pod，但是数量大于 1，那就说明要把多余的 Pod 从这个 Node 上删除掉；
+
+  正好只有一个这种 Pod，那说明这个节点是正常的。
+
+* nodeAffinity
+
+  ```yaml
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: with-node-affinity
+  spec:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: metadata.name
+              operator: In
+              values:
+              - node-geektime
+  ```
+
+  requiredDuringSchedulingIgnoredDuringExecution：它的意思是说，这个 nodeAffinity 必须在每次调度的时候予以考虑。
+
+  这个 Pod，将来只允许运行在“metadata.name”是“node-geektime”的节点上。
+
+  我们的 DaemonSet Controller 会在创建 Pod 的时候，自动在这个 Pod 的 API 对象里，加上这样一个 nodeAffinity 定义。其中，需要绑定的节点名字，正是当前正在遍历的这个 Node。
+
+  当然，DaemonSet 并不需要修改用户提交的 YAML 文件里的 Pod 模板，而是在向 Kubernetes 发起请求之前，直接修改根据模板生成的 Pod 对象。
+
+* Toleration
+
+  ```yaml
+  apiVersion: v1
+  kind: Pod
+  metadata:
+    name: with-toleration
+  spec:
+    tolerations:
+    - key: node.kubernetes.io/unschedulable
+      operator: Exists
+      effect: NoSchedule
+  ```
+
+  这个 Toleration 的含义是：“容忍”所有被标记为 unschedulable “污点”的 Node；“容忍”的效果是允许调度。
+
+  而在正常情况下，被标记了 unschedulable “污点”的 Node，是不会有任何 Pod 被调度上去的（effect: NoSchedule）。可是，DaemonSet 自动地给被管理的 Pod 加上了这个特殊的 Toleration，就使得这些 Pod 可以忽略这个限制，继而保证每个节点上都会被调度一个 Pod。当然，如果这个节点有故障的话，这个 Pod 可能会启动失败，而 DaemonSet 则会始终尝试下去，直到 Pod 启动成功。
+
+  假如当前 DaemonSet 管理的，是一个网络插件的 Agent Pod，那么你就必须在这个 DaemonSet 的 YAML 文件里，给它的 Pod 模板加上一个能够“容忍” node.kubernetes.io/network-unavailable “污点”的 Toleration。
+
+  在 Kubernetes 项目中，当一个节点的网络插件尚未安装时，这个节点就会被自动加上名为 node.kubernetes.io/network-unavailable 的“污点”。
+
+  而通过这样一个 Toleration，调度器在调度这个 Pod 的时候，就会忽略当前节点上的“污点”，从而成功地将网络插件的 Agent 组件调度到这台机器上启动起来。
+
+* DaemonSet 工作原理
+
+  DaemonSet 其实是一个非常简单的控制器。在它的控制循环中，只需要遍历所有节点，然后根据节点上是否有被管理 Pod 的情况，来决定是否要创建或者删除一个 Pod。
+
+  只不过，在创建每个 Pod 的时候，DaemonSet 会自动给这个 Pod 加上一个 nodeAffinity，从而保证这个 Pod 只会在指定节点上启动。同时，它还会自动给这个 Pod 加上一个 Toleration，从而忽略节点的 unschedulable “污点”。
+
+* DaemonSet 版本
+
+  在 Kubernetes 项目中，任何你觉得需要记录下来的状态，都可以被用 API 对象的方式实现。
+
+  Kubernetes v1.7 之后添加了一个 API 对象，名叫 ControllerRevision，专门用来记录某种 Controller 对象的版本。
+
+  `kubectl get controllerrevision -n kube-system -l name=fluentd-elasticsearch`
+
+  `kubectl describe controllerrevision fluentd-elasticsearch-5467956799 -n kube-system`
+
+  就会看到，这个 ControllerRevision 对象，实际上是在 Data 字段保存了该版本对应的完整的 DaemonSet 的 API 对象。并且，在 Annotation 字段保存了创建这个对象所使用的 kubectl 命令。
+
+  `kubectl rollout undo daemonset fluentd-elasticsearch --to-revision=1 -n kube-system`
+
+  这个 kubectl rollout undo 操作，实际上相当于读取到了 Revision=1 的 ControllerRevision 对象保存的 Data 字段。而这个 Data 字段里保存的信息，就是 Revision=1 时这个 DaemonSet 的完整 API 对象。
+
+  所以，现在 DaemonSet Controller 就可以使用这个历史 API 对象，对现有的 DaemonSet 做一次 PATCH 操作（等价于执行一次 kubectl apply -f “旧的 DaemonSet 对象”），从而把这个 DaemonSet “更新”到一个旧版本。这也是为什么，在执行完这次回滚完成后，你会发现，DaemonSet 的 Revision 并不会从 Revision=2 退回到 1，而是会增加成 Revision=3。这是因为，一个新的 ControllerRevision 被创建了出来。
+
+* DaemonSet 总结
+
+  相比于 Deployment，DaemonSet 只管理 Pod 对象，然后通过 nodeAffinity 和 Toleration 这两个调度器的小功能，保证了每个节点上有且只有一个 Pod。
+
+  与此同时，DaemonSet 使用 ControllerRevision，来保存和管理自己对应的“版本”。这种“面向 API 对象”的设计思路，大大简化了控制器本身的逻辑，也正是 Kubernetes 项目“声明式 API”的优势所在。
+
