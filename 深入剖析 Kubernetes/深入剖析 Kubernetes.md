@@ -1534,3 +1534,108 @@
 
   与此同时，DaemonSet 使用 ControllerRevision，来保存和管理自己对应的“版本”。这种“面向 API 对象”的设计思路，大大简化了控制器本身的逻辑，也正是 Kubernetes 项目“声明式 API”的优势所在。
 
+### 22 | 撬动离线业务：Job 与 CronJob
+
+* Job API 对象
+
+  可以看到，这个 Job 对象在创建后，它的 Pod 模板，被自动加上了一个 controller-uid=< 一个随机字符串 > 这样的 Label。而这个 Job 对象本身，则被自动加上了这个 Label 对应的 Selector，从而 保证了 Job 与它所管理的 Pod 之间的匹配关系。
+
+  而 Job Controller 之所以要使用这种携带了 UID 的 Label，就是为了避免不同 Job 对象所管理的 Pod 发生重合。需要注意的是，这种自动生成的 Label 对用户来说并不友好，所以不太适合推广到 Deployment 等长作业编排对象上。
+
+  事实上，restartPolicy 在 Job 对象里只允许被设置为 Never 和 OnFailure；而在 Deployment 对象里，restartPolicy 则只允许被设置为 Always。
+
+  我们在这个例子中定义了 restartPolicy=Never，那么离线作业失败后 Job Controller 就会不断地尝试创建一个新 Pod。
+
+  当然，这个尝试肯定不能无限进行下去。所以，我们就在 Job 对象的 spec.backoffLimit 字段里定义了重试次数为 4（即，backoffLimit=4），而这个字段的默认值是 6。
+
+  需要注意的是，Job Controller 重新创建 Pod 的间隔是呈指数增加的，即下一次重新创建 Pod 的动作会分别发生在 10 s、20 s、40 s ... 后。
+
+  而如果你定义的 restartPolicy=OnFailure，那么离线作业失败后，Job Controller 就不会去尝试创建新的 Pod。但是，它会不断地尝试重启 Pod 里的容器。
+
+  在 Job 的 API 对象里，有一个 spec.activeDeadlineSeconds 字段可以设置最长运行时间，比如：
+
+  ```yaml
+  spec:
+    backoffLimit: 5
+    activeDeadlineSeconds: 100
+  ```
+
+  一旦运行超过了 100 s，这个 Job 的所有 Pod 都会被终止。并且，你可以在 Pod 的状态里看到终止的原因是 reason: DeadlineExceeded。
+
+* Job Controller 对并行作业的控制方法
+
+  在 Job 对象中，负责并行控制的参数有两个：
+
+  spec.parallelism，它定义的是一个 Job 在任意时间最多可以启动多少个 Pod 同时运行；
+
+  spec.completions，它定义的是 Job 至少要完成的 Pod 数目，即 Job 的最小完成数。
+
+* Job Controller 的工作原理
+
+  首先，Job Controller 控制的对象，直接就是 Pod。
+
+  其次，Job Controller 在控制循环中进行的调谐（Reconcile）操作，是根据实际在 Running 状态 Pod 的数目、已经成功退出的 Pod 的数目，以及 parallelism、completions 参数的值共同计算出在这个周期里，应该创建或者删除的 Pod 数目，然后调用 Kubernetes API 来执行这个操作。
+
+* 三种常用的使用 Job 对象的方法
+
+  第一种用法，也是最简单粗暴的用法：外部管理器 + Job 模板。
+
+  这种模式的特定用法是：把 Job 的 YAML 文件定义为一个“模板”，然后用一个外部工具控制这些“模板”来生成 Job。
+
+  ```yaml
+  apiVersion: batch/v1
+  kind: Job
+  metadata:
+    name: process-item-$ITEM
+    labels:
+      jobgroup: jobexample
+  spec:
+    template:
+      metadata:
+        name: jobexample
+        labels:
+          jobgroup: jobexample
+      spec:
+        containers:
+        - name: c
+          image: busybox
+          command: ["sh", "-c", "echo Processing item $ITEM && sleep 5"]
+        restartPolicy: Never
+  ```
+
+  ```shell
+  mkdir ./jobs
+  for i in apple banana cherry
+  do
+    cat job-tmpl.yaml | sed "s/\$ITEM/$i/" > ./jobs/job-$i.yaml
+  done
+  
+  kubectl create -f ./jobs
+  ```
+
+  很容易理解，在这种模式下使用 Job 对象，completions 和 parallelism 这两个字段都应该使用默认值 1，而不应该由我们自行设置。而作业 Pod 的并行控制，应该完全交由外部工具来进行管理。
+
+  第二种用法：拥有固定任务数目的并行 Job。
+
+  这种模式下，我只关心最后是否有指定数目（spec.completions）个任务成功退出。至于执行时的并行度是多少，我并不关心。
+
+  第三种用法，也是很常用的一个用法：指定并行度（parallelism），但不设置固定的 completions 的值。
+
+  此时，你就必须自己想办法，来决定什么时候启动新 Pod，什么时候 Job 才算执行完成。
+
+* CronJob
+
+  CronJob 与 Job 的关系，正如同 Deployment 与 ReplicaSet 的关系一样。CronJob 是一个专门用来管理 Job 对象的控制器。只不过，它创建和删除 Job 的依据，是 schedule 字段定义的一个标准的 Unix Cron 格式的表达式。
+
+  你可以通过 spec.concurrencyPolicy 字段来定义具体的处理策略。比如：
+
+  concurrencyPolicy=Allow，这也是默认情况，这意味着这些 Job 可以同时存在；
+
+  concurrencyPolicy=Forbid，这意味着不会创建新的 Pod，该创建周期被跳过；
+
+  concurrencyPolicy=Replace，这意味着新产生的 Job 会替换旧的、没有执行完的 Job。
+
+  而如果某一次 Job 创建失败，这次创建就会被标记为“miss”。当在指定的时间窗口内，miss 的数目达到 100 时，那么 CronJob 会停止再创建这个 Job。
+
+  这个时间窗口，可以由 spec.startingDeadlineSeconds 字段指定。
+
