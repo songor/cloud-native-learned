@@ -1799,3 +1799,61 @@
 * Kubernetes 编程范式
 
   如何使用控制器模式，同 Kubernetes 里 API 对象的“增、删、改、查”进行协作，进而完成用户业务逻辑的编写过程。
+
+### 24 | 深入解析声明式 API（一）：API 对象的奥秘
+
+* 声明式 API 的设计
+
+  在 Kubernetes 项目中，一个 API 对象在 Etcd 里的完整资源路径，是由：Group（API 组）、Version（API 版本）和 Resource（API 资源类型）三个部分组成的。
+
+  通过这样的结构，整个 Kubernetes 里的所有 API 对象，实际上就可以用如下的树形结构表示出来：
+
+  ![Kubernetes API 对象树形结构](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/Kubernetes%20API%20%E5%AF%B9%E8%B1%A1%E6%A0%91%E5%BD%A2%E7%BB%93%E6%9E%84.jpg)
+
+  在这幅图中，你可以很清楚地看到 Kubernetes 里 API 对象的组织方式，其实是层层递进的。
+
+* 找到 CronJob 对象定义
+
+  首先，Kubernetes 会匹配 API 对象的组。
+
+  需要明确的是，对于 Kubernetes 里的核心 API 对象，比如：Pod、Node 等，是不需要 Group 的（即：它们的 Group 是“”）。所以，对于这些 API 对象来说，Kubernetes 会直接在 /api 这个层级进行下一步的匹配过程。
+
+  而对于 CronJob 等非核心 API 对象来说，Kubernetes 就必须在 /apis 这个层级里查找它对应的 Group，进而根据“batch”这个 Group 的名字，找到 /apis/batch。
+
+  然后，Kubernetes 会进一步匹配到 API 对象的版本号。
+
+  在 Kubernetes 中，同一种 API 对象可以有多个版本，这正是 Kubernetes 进行 API 版本化管理的重要手段。
+
+  最后，Kubernetes 会匹配 API 对象的资源类型。
+
+* APIServer 创建 CronJob 对象
+
+  ![APIServer 创建 CronJob 对象](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/APIServer%20%E5%88%9B%E5%BB%BA%20CronJob%20%E5%AF%B9%E8%B1%A1.jpg)
+
+  首先，当我们发起了创建 CronJob 的 POST 请求之后，我们编写的 YAML 的信息就被提交给了 APIServer。
+
+  而 APIServer 的第一个功能，就是过滤这个请求，并完成一些前置性的工作，比如授权、超时处理、审计等。
+
+  然后，请求会进入 MUX 和 Routes 流程。如果你编写过 Web Server 的话就会知道，MUX 和 Routes 是 APIServer 完成 URL 和 Handler 绑定的场所。而 APIServer 的 Handler 要做的事情，就是按照我刚刚介绍的匹配过程，找到对应的 CronJob 类型定义。
+
+  接着，APIServer 最重要的职责就来了：根据这个 CronJob 类型定义，使用用户提交的 YAML 文件里的字段，创建一个 CronJob 对象。
+
+  而在这个过程中，APIServer 会进行一个 Convert 工作，即：把用户提交的 YAML 文件，转换成一个叫作 Super Version 的对象，它正是该 API 资源类型所有版本的字段全集。这样用户提交的不同版本的 YAML 文件，就都可以用这个 Super Version 对象来进行处理了。
+
+  接下来，APIServer 会先后进行 Admission() 和 Validation() 操作。比如，我在上一篇文章中提到的 Admission Controller 和 Initializer，就都属于 Admission 的内容。
+
+  而 Validation，则负责验证这个对象里的各个字段是否合法。这个被验证过的 API 对象，都保存在了 APIServer 里一个叫作 Registry 的数据结构中。也就是说，只要一个 API 对象的定义能在 Registry 里查到，它就是一个有效的 Kubernetes API 对象。
+
+  最后，APIServer 会把验证过的 API 对象转换成用户最初提交的版本，进行序列化操作，并调用 Etcd 的 API 把它保存起来。
+
+* CRD
+
+  CRD 的全称是 Custom Resource Definition。顾名思义，它指的就是，允许用户在 Kubernetes 中添加一个跟 Pod、Node 类似的、新的 API 资源类型，即：自定义 API 资源。
+
+  [resouer/k8s-controller-custom-resource](https://github.com/resouer/k8s-controller-custom-resource.git)
+
+  可以看到，它其实定义了两部分内容：
+
+  第一部分是，自定义资源类型的 API 描述，包括：组（Group）、版本（Version）、资源类型（Resource）等。
+
+  第二部分是，自定义资源类型的对象描述，包括：Spec、Status 等。
