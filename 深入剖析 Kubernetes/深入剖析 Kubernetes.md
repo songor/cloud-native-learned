@@ -1882,7 +1882,7 @@
 
 * 自定义控制器的工作原理
 
-  [自定义控制器的工作流程示意图]()
+  ![自定义控制器的工作流程示意图](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/%E8%87%AA%E5%AE%9A%E4%B9%89%E6%8E%A7%E5%88%B6%E5%99%A8%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%B5%81%E7%A8%8B%E7%A4%BA%E6%84%8F%E5%9B%BE.jpg)
 
   这个控制器要做的第一件事，是从 Kubernetes 的 APIServer 里获取它所关心的对象，也就是我定义的 Network 对象。
 
