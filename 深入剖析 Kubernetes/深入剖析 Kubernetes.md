@@ -2202,3 +2202,159 @@ Kubernetes 中所有的 API 对象，都保存在 Etcd 里。可是，对这些 
   一般来说，这些系统 ClusterRole，是绑定给 Kubernetes 系统组件对应的 ServiceAccount 使用的。
 
   除此之外，Kubernetes 还提供了四个预先定义好的 ClusterRole 来供用户直接使用：cluster-admin；admin；edit；view。
+
+### 27 | 聪明的微创新：Operator 工作原理解读
+
+* Etcd Operator 的使用
+
+* Operator
+
+  Operator 的工作原理，实际上是利用了 Kubernetes 的自定义 API 资源（CRD），来描述我们想要部署的“有状态应用”；然后在自定义控制器里，根据自定义 API 对象的变化，来完成具体的部署和运维工作。
+
+* Etcd 集群
+
+  Etcd Operator 部署 Etcd 集群，采用的是静态集群（Static）的方式。
+
+  静态集群的好处是，它不必依赖于一个额外的服务发现机制来组建集群，非常适合本地容器化部署。而它的难点，则在于你必须在部署的时候，就规划好这个集群的拓扑结构，并且能够知道这些节点固定的 IP 地址。
+
+  ```shell
+  etcd --name infra2 --initial-advertise-peer-urls http://10.0.1.12:2380 \
+  --listen-peer-urls http://10.0.1.12:2380 \
+  ...
+  --initial-cluster-token etcd-cluster-1 \
+  --initial-cluster infra0=http://10.0.1.10:2380,infra1=http://10.0.1.11:2380,infra2=http://10.0.1.12:2380 \
+  --initial-cluster-state new
+  ```
+
+  其中，这些节点启动参数里的 --initial-cluster 参数，非常值得你关注。它的含义，正是当前节点启动时集群的拓扑结构。说得更详细一点，就是当前这个节点启动时，需要跟哪些节点通信来组成集群。
+
+  此外，一个 Etcd 集群还需要用 --initial-cluster-token 字段，来声明一个该集群独一无二的 Token 名字。
+
+  像上述这样为每一个 Ectd 节点配置好它对应的启动参数之后把它们启动起来，一个 Etcd 集群就可以自动组建起来了。
+
+  而我们要编写的 Etcd Operator，就是要把上述过程自动化。这其实等同于：用代码来生成每个 Etcd 节点 Pod 的启动命令，然后把它们启动起来。
+
+* Etcd Operator 部署 Etcd 集群
+
+  Etcd Operator 的实现，虽然选择的也是静态集群，但这个集群具体的组建过程，是逐个节点动态添加的方式，即：
+
+  首先，Etcd Operator 会创建一个“种子节点”；
+
+  然后，Etcd Operator 会不断创建新的 Etcd 节点，然后将它们逐一加入到这个集群当中，直到集群的节点数等于 size。
+
+  这就意味着，在生成不同角色的 Etcd Pod 时，Operator 需要能够区分种子节点与普通节点。
+
+  而这两种节点的不同之处，就在于一个名叫 --initial-cluster-state 的启动参数：
+
+  当这个参数值设为 new 时，就代表了该节点是种子节点。而我们前面提到过，种子节点还必须通过 --initial-cluster-token 声明一个独一无二的 Token。
+
+  而如果这个参数值设为 existing，那就是说明这个节点是一个普通节点，Etcd Operator 需要把它加入到已有集群里。
+
+  那么接下来的问题就是，每个 Etcd 节点的 --initial-cluster 字段的值又是怎么生成的呢？
+
+  由于这个方案要求种子节点先启动，所以对于种子节点 infra0 来说，它启动后的集群只有它自己，即：`--initial-cluster=infra0=http://10.0.1.10:2380`。
+
+  而对于接下来要加入的节点，比如 infra1 来说，它启动后的集群就有两个节点了，所以它的 --initial-cluster 参数的值应该是：`infra0=http://10.0.1.10:2380,infra1=http://10.0.1.11:2380`。
+
+  现在，你就应该能在脑海中构思出上述三节点 Etcd 集群的部署过程了。
+
+  首先，只要用户提交 YAML 文件时声明创建一个 EtcdCluster 对象（一个 Etcd 集群），那么 Etcd Operator 都应该先创建一个单节点的种子集群（Seed Member），并启动这个种子节点。以 infra0 节点为例，它的 IP 地址是 10.0.1.10，那么 Etcd Operator 生成的种子节点的启动命令，如下所示：
+
+  ```shell
+  $ etcd
+    --data-dir=/var/etcd/data
+    --name=infra0
+    --initial-advertise-peer-urls=http://10.0.1.10:2380
+    --listen-peer-urls=http://0.0.0.0:2380
+    --listen-client-urls=http://0.0.0.0:2379
+    --advertise-client-urls=http://10.0.1.10:2379
+    --initial-cluster=infra0=http://10.0.1.10:2380
+    --initial-cluster-state=new
+    --initial-cluster-token=4b5215fa-5401-4a95-a8c6-892317c9bef8
+  ```
+
+  可以看到，这个种子节点的 initial-cluster-state 是 new，并且指定了唯一的 initial-cluster-token 参数。我们可以把这个创建种子节点（集群）的阶段称为：Bootstrap。
+
+  接下来，对于其他每一个节点，Operator 只需要执行如下两个操作即可，以 infra1 为例。
+
+  第一步，通过 Etcd 命令行添加一个新成员：
+
+  ```shell
+  $ etcdctl member add infra1 http://10.0.1.11:2380
+  ```
+
+  第二步，为这个成员节点生成对应的启动参数，并启动它：
+
+  ```shell
+  $ etcd
+    --data-dir=/var/etcd/data
+    --name=infra1
+    --initial-advertise-peer-urls=http://10.0.1.11:2380
+    --listen-peer-urls=http://0.0.0.0:2380
+    --listen-client-urls=http://0.0.0.0:2379
+    --advertise-client-urls=http://10.0.1.11:2379
+    --initial-cluster=infra0=http://10.0.1.10:2380,infra1=http://10.0.1.11:2380
+    --initial-cluster-state=existing
+  ```
+
+  可以看到，对于这个 infra1 成员节点来说，它的 initial-cluster-state 是 existing，也就是要加入已有集群。而它的 initial-cluster 的值，则变成了 infra0 和 infra1 两个节点的 IP 地址。
+
+* Etcd Operator 工作原理
+
+  Etcd Operator 启动要做的第一件事（c.initResource），是创建 EtcdCluster 对象所需要的 CRD，即前面提到的 etcdclusters.etcd.database.coreos.com。这样 Kubernetes 就能够“认识” EtcdCluster 这个自定义 API 资源了。
+
+  而接下来，Etcd Operator 会定义一个 EtcdCluster 对象的 Informer。
+
+  Etcd Operator 并没有用工作队列来协调 Informer 和控制循环。
+
+  具体来讲，我们在控制循环里执行的业务逻辑，往往是比较耗时间的。比如，创建一个真实的 Etcd 集群。而 Informer 的 WATCH 机制对 API 对象变化的响应，则非常迅速。所以，控制器里的业务逻辑就很可能会拖慢 Informer 的执行周期，甚至可能 Block 它。而要协调这样两个快、慢任务的一个典型解决方法，就是引入一个工作队列。
+
+  由于 Etcd Operator 里没有工作队列，那么在它的 EventHandler 部分，就不会有什么入队操作，而直接就是每种事件对应的具体的业务逻辑了。
+
+  Etcd Operator 的特殊之处在于，它为每一个 EtcdCluster 对象，都启动了一个控制循环，“并发”地响应这些对象的变化。
+
+  当这个 YAML 文件第一次被提交到 Kubernetes 之后，Etcd Operator 的 Informer 就会立刻“感知”到一个新的 EtcdCluster 对象被创建了出来。所以，EventHandler 里的“添加”事件会被触发。
+
+  而这个 Handler 要做的操作也很简单，即：在 Etcd Operator 内部创建一个对应的 Cluster 对象（cluster.New）。
+
+  这个 Cluster 对象，就是一个 Etcd 集群在 Operator 内部的描述，所以它与真实的 Etcd 集群的生命周期是一致的。
+
+  而一个 Cluster 对象需要具体负责的，其实有两个工作。
+
+  其中，第一个工作只在该 Cluster 对象第一次被创建的时候才会执行。这个工作，就是我们前面提到过的 Bootstrap，即：创建一个单节点的种子集群。
+
+  由于种子集群只有一个节点，所以这一步直接就会生成一个 Etcd 的 Pod 对象。这个 Pod 里有一个 InitContainer，负责检查 Pod 的 DNS 记录是否正常。如果检查通过，用户容器也就是 Etcd 容器就会启动起来。
+
+  可以看到，在这些启动参数（比如：initial-cluster）里，Etcd Operator 只会使用 Pod 的 DNS 记录，而不是它的 IP 地址。
+
+  这当然是因为，在 Operator 生成上述启动命令的时候，Etcd 的 Pod 还没有被创建出来，它的 IP 地址自然也无从谈起。
+
+  这也就意味着，每个 Cluster 对象，都会事先创建一个与该 EtcdCluster 同名的 Headless Service。这样，Etcd Operator 在接下来的所有创建 Pod 的步骤里，就都可以使用 Pod 的 DNS 记录来代替它的 IP 地址了。
+
+  Cluster 对象的第二个工作，则是启动该集群所对应的控制循环。
+
+  这个控制循环每隔一定时间，就会执行一次下面的 Diff 流程。
+
+  首先，控制循环要获取到所有正在运行的、属于这个 Cluster 的 Pod 数量，也就是该 Etcd 集群的“实际状态”。
+
+  而这个 Etcd 集群的“期望状态”，正是用户在 EtcdCluster 对象里定义的 size。
+
+  所以接下来，控制循环会对比这两个状态的差异。
+
+  如果实际的 Pod 数量不够，那么控制循环就会执行一个添加成员节点的操作；反之，就执行删除成员节点的操作。
+
+* StatefulSet vs Operator
+
+  第一个问题是，在 StatefulSet 里，它为 Pod 创建的名字是带编号的，这样就把整个集群的拓扑状态固定了下来（比如：一个三节点的集群一定是由名叫 web-0、web-1 和 web-2 的三个 Pod 组成）。可是，在 Etcd Operator 里，为什么我们使用随机名字就可以了呢？
+
+  这是因为，Etcd Operator 在每次添加 Etcd 节点的时候，都会先执行 etcdctl member add；每次删除节点的时候，则会执行 etcdctl member remove 。这些操作，其实就会更新 Etcd 内部维护的拓扑信息，所以 Etcd Operator 无需在集群外部通过编号来固定这个拓扑关系。
+
+  第二个问题是，为什么我没有在 EtcdCluster 对象里声明 Persistent Volume？
+
+  我们知道，Etcd 是一个基于 Raft 协议实现的高可用 Key-Value 存储。根据 Raft 协议的设计原则，当 Etcd 集群里只有半数以下的节点失效时，当前集群依然可以正常工作。此时，Etcd Operator 只需要通过控制循环创建出新的 Pod，然后将它们加入到现有集群里，就完成了“期望状态”与“实际状态”的调谐工作。这个集群，是一直可用的 。
+
+  但是，当这个 Etcd 集群里有半数以上的节点失效的时候，这个集群就会丧失数据写入的能力，从而进入“不可用”状态。此时，即使 Etcd Operator 创建出新的 Pod 出来，Etcd 集群本身也无法自动恢复起来。
+
+  这个时候，我们就必须使用 Etcd 本身的备份数据来对集群进行恢复操作。
+
+  在有了 Operator 机制之后，上述 Etcd 的备份操作，是由一个单独的 Etcd Backup Operator 负责完成的。
