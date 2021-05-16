@@ -311,7 +311,7 @@
 
   * 共享存储
 
-    ![Pod 共享存储](https://github.com/songor/cloud-native-learned/blob/master/images/Pod%20%E5%85%B1%E4%BA%AB%E5%AD%98%E5%82%A8.PNG)
+    ![Pod 共享存储](images/Pod 共享存储.PNG)
 
     Pod level volume -> shared-data 对应在宿主机上的目录会被同时绑定挂载进容器中
 
@@ -425,7 +425,7 @@
 
   * Deployment 语法
 
-    ![Deployment 语法](https://github.com/songor/cloud-native-learned/blob/master/images/Deployment%20%E8%AF%AD%E6%B3%95.PNG)
+    ![Deployment 语法](images/Deployment 语法.PNG)
 
   * 查看 Deployment 状态
 
@@ -471,7 +471,7 @@
 
   * DeploymentStatus
 
-    ![DeploymentStatus](https://github.com/songor/cloud-native-learned/blob/master/images/DeploymentStatus.PNG)
+    ![DeploymentStatus](images/DeploymentStatus.PNG)
 
 * 架构设计
 
@@ -531,7 +531,7 @@
 
   * Job 语法
 
-    ![Job 语法](https://github.com/songor/cloud-native-learned/blob/master/images/Job%20%E8%AF%AD%E6%B3%95.PNG)
+    ![Job 语法](images/Job 语法.PNG)
 
     restartPolicy - 重启策略
 
@@ -665,7 +665,7 @@
 
     主要管理容器运行所需的配置文件，环境变量，命令行参数等可变配置。用于解耦容器镜像和可变配置，从而保障工作负载（Pod）的可移植性
 
-    ![ConfigMap](https://github.com/songor/cloud-native-learned/blob/master/images/ConfigMap.PNG)
+    ![ConfigMap](images/ConfigMap.PNG)
 
   * 创建
 
@@ -703,7 +703,7 @@
 
     集群中用于存储密码，token 等敏感信息的资源对象，其中的敏感数据采用 Base64 编码保存
 
-    ![Secret](https://github.com/songor/cloud-native-learned/blob/master/images/Secret.PNG)
+    ![Secret](images/Secret.PNG)
 
   * 创建
 
@@ -747,7 +747,7 @@
 
     主要用于解决 Pod 在集群中的身份认证问题；其中认证使用的授权信息，利用 Secret 进行管理
 
-    ![ServiceAccount](https://github.com/songor/cloud-native-learned/blob/master/images/ServiceAccount.PNG)
+    ![ServiceAccount](images/ServiceAccount.PNG)
 
   * Pod 里的应用访问它所属的 k8s 集群
 
@@ -767,7 +767,7 @@
 
   容器资源配置管理
 
-  ![Resource](https://github.com/songor/cloud-native-learned/blob/master/images/Resource.PNG)
+  ![Resource](images/Resource.PNG)
 
   * 支持资源类型
 
@@ -819,7 +819,7 @@
 
   主要用于限制容器的行为，从而保障系统和其他容器的安全
 
-  ![SecurityContext](https://github.com/songor/cloud-native-learned/blob/master/images/SecurityContext.PNG)
+  ![SecurityContext](images/SecurityContext.PNG)
 
   * 分类
 
