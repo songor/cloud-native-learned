@@ -65,7 +65,7 @@
 
 * 虚拟机 vs Docker
 
-  ![虚拟机 vs Docker](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/%E8%99%9A%E6%8B%9F%E6%9C%BA%20vs%20Docker.jpg)
+  ![虚拟机 vs Docker](images/虚拟机 vs Docker.jpg)
 
   这幅图的左边，画出了虚拟机的工作原理。其中，名为 Hypervisor 的软件是虚拟机最主要的部分。它通过硬件虚拟化功能，模拟出了运行一个操作系统需要的各种硬件，比如 CPU、内存、I/O 设备等等。然后，它在这些虚拟的硬件上安装了一个新的操作系统，即 Guest OS。
 
@@ -218,7 +218,7 @@
 
 * 镜像分层
 
-  ![镜像分层](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/%E9%95%9C%E5%83%8F%E5%88%86%E5%B1%82.jpg)
+  ![镜像分层](images/镜像分层.jpg)
 
   第一部分，只读层。
 
@@ -371,7 +371,7 @@
 
   其实，如果你了解 Linux 内核的话，就会明白，绑定挂载实际上是一个 inode 替换的过程。在 Linux 操作系统中，inode 可以理解为存放文件内容的“对象”，而 dentry，也叫目录项，就是访问这个 inode 所使用的“指针”。
 
-  ![bind mount](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/bind%20mount.jpg)
+  ![bind mount](images/bind mount.jpg)
 
   所以，在一个正确的时机，进行一次绑定挂载，Docker 就可以成功地将一个宿主机上的目录或文件，不动声色地挂载到容器中。
 
@@ -383,7 +383,7 @@
 
 * “全景图”
 
-  ![Docker 容器全景图](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/Docker%20%E5%AE%B9%E5%99%A8%E5%85%A8%E6%99%AF%E5%9B%BE.jpg)
+  ![Docker 容器全景图](images/Docker 容器全景图.jpg)
 
 ### 09 | 从容器到容器云：谈谈 Kubernetes 的本质
 
@@ -399,7 +399,7 @@
 
 * Kubernetes 架构
 
-  ![Kubernetes 架构](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/Kubernetes%20%E6%9E%B6%E6%9E%84.jpg)
+  ![Kubernetes 架构](images/Kubernetes 架构.jpg)
 
   我们可以看到，Kubernetes 项目的架构，跟它的原型项目 Borg 非常类似，都由 Master 和 Node 两种节点组成，而这两种角色分别对应着控制节点和计算节点。
 
@@ -425,7 +425,7 @@
 
   Kubernetes 项目最主要的设计思想是，从更宏观的角度，以统一的方式来定义任务之间的各种关系，并且为将来支持更多种类的关系留有余地。
 
-  ![Kubernetes 核心功能全景图](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/Kubernetes%20%E6%A0%B8%E5%BF%83%E5%8A%9F%E8%83%BD%E5%85%A8%E6%99%AF%E5%9B%BE.jpg)
+  ![Kubernetes 核心功能全景图](images/Kubernetes 核心功能全景图.jpg)
 
   在 Kubernetes 项目中，我们所推崇的使用方法是：首先，通过一个“编排对象”，比如 Pod、Job、CronJob 等，来描述你试图管理的应用；然后，再为它定义一些“服务对象”，比如 Service、Secret、Horizontal Pod Autoscaler（自动水平扩展器）等。这些对象，会负责具体的平台级功能。
 
@@ -877,7 +877,7 @@
 
 * Deployment、ReplicaSet，以及 Pod 的关系
 
-  ![Deployment、ReplicaSet，以及 Pod 的关系](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/Deployment%E3%80%81ReplicaSet%EF%BC%8C%E4%BB%A5%E5%8F%8A%20Pod%20%E7%9A%84%E5%85%B3%E7%B3%BB.jpg)
+  ![Deployment、ReplicaSet，以及 Pod 的关系](images/Deployment、ReplicaSet，以及 Pod 的关系.jpg)
 
   通过这张图，我们就很清楚地看到，一个定义了 replicas=3 的 Deployment，与它的 ReplicaSet，以及 Pod 的关系，实际上是一种“层层控制”的关系。
 
@@ -1812,7 +1812,7 @@
 
   通过这样的结构，整个 Kubernetes 里的所有 API 对象，实际上就可以用如下的树形结构表示出来：
 
-  ![Kubernetes API 对象树形结构](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/Kubernetes%20API%20%E5%AF%B9%E8%B1%A1%E6%A0%91%E5%BD%A2%E7%BB%93%E6%9E%84.jpg)
+  ![Kubernetes API 对象树形结构](images/Kubernetes API 对象树形结构.jpg)
 
   在这幅图中，你可以很清楚地看到 Kubernetes 里 API 对象的组织方式，其实是层层递进的。
 
@@ -1832,7 +1832,7 @@
 
 * APIServer 创建 CronJob 对象
 
-  ![APIServer 创建 CronJob 对象](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/APIServer%20%E5%88%9B%E5%BB%BA%20CronJob%20%E5%AF%B9%E8%B1%A1.jpg)
+  ![APIServer 创建 CronJob 对象](images/APIServer 创建 CronJob 对象.jpg)
 
   首先，当我们发起了创建 CronJob 的 POST 请求之后，我们编写的 YAML 的信息就被提交给了 APIServer。
 
@@ -1886,7 +1886,7 @@
 
 * 自定义控制器的工作原理
 
-  ![自定义控制器的工作流程示意图](https://github.com/songor/cloud-native-learned/blob/master/%E6%B7%B1%E5%85%A5%E5%89%96%E6%9E%90%20Kubernetes/images/%E8%87%AA%E5%AE%9A%E4%B9%89%E6%8E%A7%E5%88%B6%E5%99%A8%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%B5%81%E7%A8%8B%E7%A4%BA%E6%84%8F%E5%9B%BE.jpg)
+  ![自定义控制器的工作流程示意图](images/自定义控制器的工作流程示意图.jpg)
 
   这个控制器要做的第一件事，是从 Kubernetes 的 APIServer 里获取它所关心的对象，也就是我定义的 Network 对象。
 
